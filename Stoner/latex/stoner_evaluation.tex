@@ -1,0 +1,590 @@
+\documentclass[11pt,a4paper]{article}
+
+% ---------------------------- Packages ------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[english]{babel}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{physics}                 % \dd, \abs, etc.
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{tcolorbox}
+\tcbuselibrary{breakable,skins}
+\usepackage{siunitx}
+\usepackage{enumitem}
+
+% ---------------------------- Style ---------------------------------------
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!60!black,
+    urlcolor=blue!60!black,
+    citecolor=blue!60!black
+}
+
+% Custom boxes
+\newtcolorbox{filebox}[1][]{
+    enhanced, breakable,
+    colback=gray!5, colframe=gray!50!black,
+    fonttitle=\bfseries\small,
+    title={Source file},
+    boxrule=0.6pt, arc=2pt,
+    #1
+}
+
+\newtcolorbox{resultbox}[1][]{
+    enhanced, breakable,
+    colback=blue!4, colframe=blue!50!black,
+    fonttitle=\bfseries\small,
+    title={Result},
+    boxrule=0.6pt, arc=2pt,
+    #1
+}
+
+\newtcolorbox{warningbox}[1][]{
+    enhanced, breakable,
+    colback=orange!8, colframe=orange!60!black,
+    fonttitle=\bfseries\small,
+    title={Convention warning},
+    boxrule=0.6pt, arc=2pt,
+    #1
+}
+
+% Code listing style
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    framerule=0.4pt,
+    rulecolor=\color{gray!60},
+    backgroundcolor=\color{gray!5},
+    columns=fullflexible,
+    showstringspaces=false
+}
+
+% Compact math
+\newcommand{\Ef}{E_{\mathrm{F}}}
+\newcommand{\Tid}{\text{Ti-}d}
+\newcommand{\rhoup}{\rho^{\uparrow}}
+\newcommand{\rhodn}{\rho^{\downarrow}}
+\newcommand{\Dex}{\Delta_{\text{ex}}}
+\newcommand{\Ieff}{I_{\text{eff}}}
+\newcommand{\NEf}{N(\Ef)}
+
+% Title
+\title{\bfseries
+    Stoner Criterion Evaluation\\
+    \large An operational guide for (Nb$_{0.8}$Ti$_{0.2}$)$_4$C$_3$
+}
+\author{}
+\date{\today}
+
+% =========================================================================
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+This document is an operational guide. It shows step by step \emph{how}
+the Stoner criterion was evaluated for the 2D MXene
+(Nb$_{0.8}$Ti$_{0.2}$)$_4$C$_3$. For each numerical value, we indicate
+which Quantum ESPRESSO output file contains it and which formula is
+applied. The goal is full reproducibility: anyone who runs the same
+calculations should obtain the same numbers (within $\sim 1\%$
+numerical noise).
+\end{abstract}
+
+% =========================================================================
+\section{Introduction}
+
+\subsection{What is the Stoner criterion?}
+
+The Stoner criterion is a band-theory test. It predicts when a metal
+spontaneously becomes ferromagnetic. The condition is:
+%
+\begin{equation}
+    \boxed{\,\Ieff \cdot \NEf \;>\; 1\,}
+    \label{eq:stoner}
+\end{equation}
+%
+where
+\begin{itemize}[itemsep=2pt]
+    \item $\NEf$ is the density of states at the Fermi level (per atom,
+          per spin) computed in the \emph{non-magnetic} state.
+    \item $\Ieff$ is an effective exchange parameter with units of energy.
+\end{itemize}
+
+If the product exceeds one, the paramagnetic state is unstable against
+spontaneous spin polarization, and the system becomes ferromagnetic.
+
+\subsection{System under study}
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{l l}
+\toprule
+Composition           & (Nb$_{0.8}$Ti$_{0.2}$)$_4$C$_3$ \\
+Unit cell             & 56 atoms (6~Ti, 26~Nb, 24~C) \\
+Dimensionality        & 2D MXene with vacuum \\
+Code                  & Quantum ESPRESSO 7.4.1 \\
+Functional            & PBE (GGA) \\
+Hubbard $U$           & $U(\text{Ti-}3d) = 4.3$~eV, $U(\text{Nb-}4d) = 3.4$~eV \\
+\bottomrule
+\end{tabular}
+\caption{Calculation setup.}
+\end{table}
+
+\paragraph{Pseudopotentials.} All pseudopotentials are scalar-relativistic
+and taken from the SSSP Efficiency library, version 1.3.0:
+
+\begin{table}[h!]
+\centering
+\small
+\begin{tabular}{l c l l}
+\toprule
+Element & Mass (a.m.u.) & File & Type \\
+\midrule
+Ti & 47.867 & \texttt{ti\_pbe\_v1.4.uspp.F.UPF}              & USPP \\
+Nb & 92.906 & \texttt{Nb.pbe-spn-kjpaw\_psl.0.3.0.UPF}       & PAW  \\
+C  & 12.011 & \texttt{C.pbe-n-kjpaw\_psl.1.0.0.UPF}          & PAW  \\
+\bottomrule
+\end{tabular}
+\caption{Pseudopotentials used in the calculations.}
+\end{table}
+
+% =========================================================================
+\section{How $\Ieff$ is obtained}
+
+We cannot extract $\Ieff$ directly from a DFT calculation. We use the
+standard approximation: in the ferromagnetic state, the exchange
+interaction shifts the spin-up and spin-down bands apart by an amount
+$\Dex$, and this shift is proportional to the magnetic moment:
+%
+\begin{equation}
+    \Dex \;\approx\; \Ieff \cdot m
+    \quad\Longrightarrow\quad
+    \boxed{\,\Ieff \;=\; \frac{\Dex}{m_{\Tid}}\,}
+    \label{eq:Ieff}
+\end{equation}
+%
+Therefore the criterion in
+Eq.~\eqref{eq:stoner} can be rewritten as:
+%
+\begin{equation}
+    \boxed{\,\frac{\Dex}{m_{\Tid}} \cdot \NEf \;>\; 1\,}
+    \label{eq:stoner-practical}
+\end{equation}
+
+We need \textbf{three numerical inputs}:
+%
+\begin{enumerate}[label=(\alph*)]
+    \item $\NEf$: from the \textbf{non-magnetic} calculation.
+    \item $m_{\Tid}$: from the \textbf{ferromagnetic} calculation.
+    \item $\Dex$: from the \textbf{ferromagnetic} calculation.
+\end{enumerate}
+
+This is why we run \emph{two} independent self-consistent calculations
+on the same system.
+
+% =========================================================================
+\section{The two calculations we need}
+
+\subsection{Why two calculations?}
+
+The Stoner criterion tests an \emph{instability} of the
+\emph{paramagnetic} state. Therefore $\NEf$ must come from the
+non-magnetic reference; using $\NEf$ from the spin-polarized result
+would underestimate it, because the ferromagnetic state has already
+moved states away from $\Ef$.
+
+The local moment $m_{\Tid}$ and the band splitting $\Dex$, on the other
+hand, only exist in the ferromagnetic solution.
+
+\subsection{Files produced by each calculation}
+
+Each calculation is a chain of four Quantum ESPRESSO steps:
+%
+\begin{center}
+\texttt{pw.x (scf)} $\to$ \texttt{pw.x (nscf)} $\to$ \texttt{dos.x} $\to$ \texttt{projwfc.x}
+\end{center}
+
+\noindent The files we will use are summarized in Table~\ref{tab:files}.
+%
+\begin{table}[h!]
+\small
+\centering
+\begin{tabular}{l l l}
+\toprule
+Calculation                    & File                                                  & Provides \\
+\midrule
+NM (\texttt{nspin=1})          & \texttt{non-magnetic/outputs/bare.opt}                & $\Ef^{\text{NM}}$ \\
+NM                             & \texttt{non-magnetic/pdos\_files/mxns.pdos\_atm\#$N$(Ti)\_wfc\#4(d)} & $\rho^{\Tid}(E)$ in NM state \\
+FM (\texttt{nspin=2})          & \texttt{magnetic/outputs/bare.opt}                    & $\Ef^{\text{FM}}$, magnetization \\
+FM                             & \texttt{magnetic/pdos/mxns.pdos\_atm\#$N$(Ti)\_wfc\#4(d)}            & $\rho^{\uparrow,\Tid}(E)$, $\rho^{\downarrow,\Tid}(E)$ \\
+\bottomrule
+\end{tabular}
+\caption{Files used in the Stoner evaluation. $N$ runs over the six Ti
+atoms ($N = 1,\dots,6$).}
+\label{tab:files}
+\end{table}
+
+% =========================================================================
+\section{Step-by-step procedure}
+
+\subsection{Step 1: Extract the two Fermi energies}
+
+The Fermi energy is printed by \texttt{pw.x} at the end of each SCF run.
+Search for the line:
+%
+\begin{lstlisting}
+the Fermi energy is X.XXXX ev
+\end{lstlisting}
+
+\begin{filebox}
+\textbf{NM:} \texttt{non-magnetic/outputs/bare.opt}\\
+\textbf{FM:} \texttt{magnetic/outputs/bare.opt}
+\end{filebox}
+
+In Python this is one line:
+\begin{lstlisting}[language=Python]
+matches = re.findall(r"the Fermi energy is\s+([-+.\d]+)\s+ev",
+                     scf_out, re.IGNORECASE)
+E_F = float(matches[-1])   # take the last (converged) value
+\end{lstlisting}
+
+\begin{resultbox}
+$\Ef^{\text{NM}} = 5.0476$~eV \\
+$\Ef^{\text{FM}} = 5.2374$~eV
+\end{resultbox}
+
+\begin{warningbox}
+\texttt{dos.x} prints its own Fermi energy in the header of
+\texttt{mxns.dos}. Do \textbf{not} use that one — it is recomputed with
+the NSCF smearing and may differ by $\sim 10$~meV. Always use the value
+from the SCF (\texttt{bare.opt}).
+\end{warningbox}
+
+% -------------------------------------------------------------------------
+\subsection{Step 2: Compute $\NEf$ from the non-magnetic PDOS}
+
+The non-magnetic calculation produces, for each Ti atom, a file named
+\verb|mxns.pdos_atm#N(Ti)_wfc#4(d)| with seven columns. The format is
+described in Table~\ref{tab:pdos-NM}.
+%
+\begin{table}[h!]
+\small
+\centering
+\begin{tabular}{c l}
+\toprule
+Column & Quantity \\
+\midrule
+1 & energy $E$ (eV) \\
+2 & total Ti-$d$ LDOS (per spin) \\
+3 & PDOS $d_{z^2}$ \\
+4 & PDOS $d_{xz}$ \\
+5 & PDOS $d_{yz}$ \\
+6 & PDOS $d_{x^2-y^2}$ \\
+7 & PDOS $d_{xy}$ \\
+\bottomrule
+\end{tabular}
+\caption{Column layout of the NM PDOS files (\texttt{nspin=1}, 7
+columns).}
+\label{tab:pdos-NM}
+\end{table}
+
+\paragraph{What to do.} We sum the LDOS over all six Ti atoms, divide by
+six (to get a per-atom quantity), and evaluate at $E = \Ef^{\text{NM}}$:
+%
+\begin{equation}
+    \NEf \;=\; \frac{1}{6}\sum_{N=1}^{6}
+    \rho^{\text{Ti-}d, \text{NM}}_{N}(\Ef^{\text{NM}}).
+    \label{eq:NEf}
+\end{equation}
+
+\begin{warningbox}
+In \texttt{nspin=1}, the LDOS that Quantum ESPRESSO writes is
+\emph{already per spin channel}. The integral $\int_{-\infty}^{\Ef}
+\text{LDOS}(E)\,\dd E$ gives $N_{\text{total}}/2$, not $N_{\text{total}}$.
+For the Stoner formula, the per-spin convention is exactly what we want
+— so we do \textbf{not} multiply by 2.
+\end{warningbox}
+
+\paragraph{Pseudo-code.}
+\begin{lstlisting}[language=Python]
+ldos_d_NM = sum(data_Ti[i][:, 1] for i in range(6))
+ldos_d_NM_per_Ti = ldos_d_NM / 6
+N_EF = numpy.interp(E_F_NM, E_grid, ldos_d_NM_per_Ti)
+\end{lstlisting}
+
+\begin{resultbox}
+$\NEf \;=\; 1.1920$~states/eV/Ti/spin
+\end{resultbox}
+
+% -------------------------------------------------------------------------
+\subsection{Step 3: Compute $m_{\Tid}$ from the ferromagnetic PDOS}
+
+The ferromagnetic PDOS files have 13 columns (spin-resolved): see
+Table~\ref{tab:pdos-FM}.
+%
+\begin{table}[h!]
+\small
+\centering
+\begin{tabular}{c l}
+\toprule
+Column & Quantity \\
+\midrule
+1     & energy $E$ (eV) \\
+2, 3  & total Ti-$d$ LDOS $\uparrow$, $\downarrow$ \\
+4, 5  & PDOS $d_{z^2}$ $\uparrow$, $\downarrow$ \\
+6, 7  & PDOS $d_{xz}$  $\uparrow$, $\downarrow$ \\
+8, 9  & PDOS $d_{yz}$  $\uparrow$, $\downarrow$ \\
+10, 11& PDOS $d_{x^2-y^2}$ $\uparrow$, $\downarrow$ \\
+12, 13& PDOS $d_{xy}$ $\uparrow$, $\downarrow$ \\
+\bottomrule
+\end{tabular}
+\caption{Column layout of the FM PDOS files (\texttt{nspin=2}, 13
+columns).}
+\label{tab:pdos-FM}
+\end{table}
+
+\paragraph{What to do.} Sum the LDOS$^{\uparrow}$ and LDOS$^{\downarrow}$
+over the six Ti atoms, divide by six, integrate from the lower bound to
+$\Ef^{\text{FM}}$, and take the difference:
+%
+\begin{align}
+    N^{\uparrow}_{\Tid}
+        &\;=\; \frac{1}{6}\sum_{N=1}^{6}
+              \int_{-\infty}^{\Ef^{\text{FM}}}
+              \rhoup_{N,\Tid}(E)\,\dd E,
+    \label{eq:Nup}\\[4pt]
+    N^{\downarrow}_{\Tid}
+        &\;=\; \frac{1}{6}\sum_{N=1}^{6}
+              \int_{-\infty}^{\Ef^{\text{FM}}}
+              \rhodn_{N,\Tid}(E)\,\dd E,
+    \label{eq:Ndn}\\[4pt]
+    m_{\Tid}
+        &\;=\; N^{\uparrow}_{\Tid} - N^{\downarrow}_{\Tid}.
+    \label{eq:m}
+\end{align}
+
+The integral has units of (states/eV)$\times$eV = electrons. Each
+unbalanced electron carries one Bohr magneton, so the difference is
+$m_{\Tid}$ in $\mu_{\text{B}}$/Ti.
+
+\paragraph{Pseudo-code.}
+\begin{lstlisting}[language=Python]
+ldos_up_FM = sum(data_Ti_FM[i][:, 1] for i in range(6)) / 6
+ldos_dn_FM = sum(data_Ti_FM[i][:, 2] for i in range(6)) / 6
+mask = (E_grid_FM <= E_F_FM)
+N_up = numpy.trapezoid(ldos_up_FM[mask], E_grid_FM[mask])
+N_dn = numpy.trapezoid(ldos_dn_FM[mask], E_grid_FM[mask])
+m_Ti_d = N_up - N_dn
+\end{lstlisting}
+
+\begin{resultbox}
+$N^{\uparrow}_{\Tid}  = 1.6103$~e/Ti \\
+$N^{\downarrow}_{\Tid} = 0.6951$~e/Ti \\
+$m_{\Tid} = 0.9152$~$\mu_{\text{B}}$/Ti
+\end{resultbox}
+
+\paragraph{Cross-check.} Quantum ESPRESSO also writes Löwdin moments
+directly inside the file \texttt{magnetic/outputs/pdos.opt}, in lines
+like
+\begin{lstlisting}
+Atom #  1: ... spin up   = 5.9450, ..., d = 1.6130, dz2= 0.1199, ...
+              spin down = 4.9599, ..., d = 0.6996, dz2= 0.0912, ...
+\end{lstlisting}
+Subtracting $d^{\downarrow}$ from $d^{\uparrow}$ for each Ti and
+averaging gives an independent estimate of $m_{\Tid}$ that should agree
+with the PDOS integral to within $\sim 1\%$. This is a useful sanity
+check.
+
+% -------------------------------------------------------------------------
+\subsection{Step 4: Compute the exchange splitting $\Dex$}
+
+We use the \textbf{center-of-mass method}: $\Dex$ is the energy
+difference between the centers of mass of the spin-up and spin-down
+Ti-$d$ bands.
+
+\paragraph{Formulas.} Let $W = [W_1, W_2]$ be an energy window
+(relative to $\Ef^{\text{FM}}$). Define:
+%
+\begin{align}
+    \varepsilon^{\uparrow}_{d}
+        &\;=\;
+        \frac{\int_{W} E \, \rhoup_{\Tid}(E) \,\dd E}
+             {\int_{W} \rhoup_{\Tid}(E) \,\dd E},
+    \label{eq:eps-up}\\[4pt]
+    \varepsilon^{\downarrow}_{d}
+        &\;=\;
+        \frac{\int_{W} E \, \rhodn_{\Tid}(E) \,\dd E}
+             {\int_{W} \rhodn_{\Tid}(E) \,\dd E},
+    \label{eq:eps-dn}\\[4pt]
+    \Dex
+        &\;=\;
+        \varepsilon^{\downarrow}_{d} - \varepsilon^{\uparrow}_{d}.
+    \label{eq:Dex}
+\end{align}
+
+\paragraph{Window choice.} We use $W = [-8, +10]$~eV (relative to
+$\Ef$). This is wide enough to contain the entire Ti-$d$ band on both
+spin channels. The robustness to this choice is checked below.
+
+\paragraph{Pseudo-code.}
+\begin{lstlisting}[language=Python]
+E_rel = E_grid_FM - E_F_FM
+mask  = (E_rel >= -8.0) & (E_rel <= 10.0)
+eps_up = (numpy.trapezoid(E_rel[mask] * ldos_up_FM[mask], E_rel[mask])
+          / numpy.trapezoid(ldos_up_FM[mask], E_rel[mask]))
+eps_dn = (numpy.trapezoid(E_rel[mask] * ldos_dn_FM[mask], E_rel[mask])
+          / numpy.trapezoid(ldos_dn_FM[mask], E_rel[mask]))
+Delta_ex = eps_dn - eps_up
+\end{lstlisting}
+
+\begin{resultbox}
+$\varepsilon^{\uparrow}_{d} = +0.6173$~eV \\
+$\varepsilon^{\downarrow}_{d} = +1.7844$~eV \\
+$\Dex = 1.1672$~eV
+\end{resultbox}
+
+% -------------------------------------------------------------------------
+\subsection{Step 5: Combine the pieces}
+
+We now have everything we need. Following
+Eq.~\eqref{eq:Ieff}:
+%
+\begin{equation}
+    \Ieff
+    \;=\; \frac{\Dex}{m_{\Tid}}
+    \;=\; \frac{1.1672~\text{eV}}{0.9152~\mu_{\text{B}}}
+    \;=\; 1.2753~\text{eV}.
+\end{equation}
+
+Applying the Stoner criterion of Eq.~\eqref{eq:stoner}:
+%
+\begin{equation}
+    \boxed{\,
+    \Ieff \cdot \NEf
+    \;=\; 1.2753 \times 1.1920
+    \;=\; 1.5201
+    \,}
+    \label{eq:final}
+\end{equation}
+
+\begin{resultbox}
+\textbf{Stoner criterion: SATISFIED}\\[2pt]
+$\Ieff \cdot \NEf = 1.5201 > 1$, with a margin of $+52.0\%$.\\[2pt]
+The non-magnetic state is unstable. The system favours an itinerant
+Stoner-type ferromagnetic ordering on the Ti sublattice.
+\end{resultbox}
+
+% =========================================================================
+\section{Robustness checks}
+
+\subsection{Sensitivity to the window in $\Dex$}
+
+The center-of-mass formula in
+Eqs.~\eqref{eq:eps-up}--\eqref{eq:Dex} depends on the chosen energy
+window. We have verified that the result is essentially insensitive to
+this choice:
+%
+\begin{table}[h!]
+\centering
+\begin{tabular}{c c c}
+\toprule
+Window (eV)      & $\Dex$ (eV)   & Change vs.\ default \\
+\midrule
+$[-8, +10]$ (default) & 1.1672 & --        \\
+$[-7, +8]$            & 1.1672 & 0.00\%    \\
+$[-6, +6]$            & 1.1646 & $-0.22\%$ \\
+$[-10, +10]$          & 1.1671 & $-0.01\%$ \\
+\bottomrule
+\end{tabular}
+\caption{Exchange splitting under different integration windows.}
+\end{table}
+
+\subsection{Cross-check between methods}
+
+The Ti-$d$ moment computed by PDOS integration
+($m_{\Tid} = 0.9152$~$\mu_{\text{B}}$/Ti) agrees with the Löwdin moment
+in \texttt{magnetic/outputs/pdos.opt} to within $\sim 0.4\%$. This is
+the expected level of internal consistency.
+
+% =========================================================================
+\section{Physical interpretation}
+
+\begin{itemize}[itemsep=2pt]
+    \item The product $\Ieff \cdot \NEf = 1.52$ is well above the
+          critical value of 1. The system is unambiguously above
+          threshold.
+    \item The effective exchange $\Ieff \approx 1.28$~eV is in the range
+          typical of early 3$d$ transition metals.
+    \item The bandsplitting $\Dex \approx 1.17$~eV is comparable to that
+          of bulk iron ($\sim 1.5$~eV) and confirms that the Ti-$d$
+          shell is strongly exchange-split.
+    \item Because the criterion is satisfied with a $+52\%$ margin, the
+          ferromagnetic alignment of the Ti sublattice is robust to
+          small variations in calculation parameters (smearing,
+          $k$-grid, Hubbard $U$).
+\end{itemize}
+
+% =========================================================================
+\section{What this criterion does NOT prove}
+
+The Stoner criterion answers \emph{one specific question}: whether the
+paramagnetic state is unstable against ferromagnetic alignment on the
+relevant orbital. It does \textbf{not} prove the following:
+
+\begin{itemize}[itemsep=2pt]
+    \item \textbf{That FM is the ground state.} An antiferromagnetic
+          configuration could still be lower in energy. To rule that
+          out, we would need to compute candidate AFM configurations
+          explicitly.
+    \item \textbf{The Curie temperature.} A mean-field Stoner estimate
+          systematically overestimates $T_c$. A more reliable value
+          requires exchange constants $J_{ij}$ (e.g., from Wannier
+          functions) plus a Monte Carlo or magnon spectrum calculation.
+    \item \textbf{Half-metallicity.} The system is not half-metallic:
+          the spin polarization at $\Ef$ on the total DOS is only
+          $\approx 2.4\%$, with both spin channels having finite DOS.
+    \item \textbf{Dynamic stability.} The phonon spectrum has not been
+          computed in the present work.
+\end{itemize}
+
+% =========================================================================
+\section{Summary}
+
+\noindent\textbf{Verdict:} Stoner criterion satisfied with a margin of
+$+52.0\%$. See the full table of inputs, outputs, and intermediate
+quantities below.
+
+\begin{table}[h!]
+	\centering
+	\small
+	\renewcommand{\arraystretch}{1.5}
+	\begin{tabular}{l l l}
+		\toprule
+		Quantity                & Value                & Source \\
+		\midrule
+		$\Ef^{\text{NM}}$       & 5.0476 eV            & \texttt{non-magnetic/outputs/bare.opt} \\
+		$\Ef^{\text{FM}}$       & 5.2374 eV            & \texttt{magnetic/outputs/bare.opt} \\
+		$\NEf$                  & 1.1920 states/eV/Ti/spin & NM PDOS Ti-$d$, interpolated at $\Ef^{\text{NM}}$ \\
+		$N^{\uparrow}_{\Tid}$   & 1.6103 e/Ti          & FM PDOS, $\int_{-\infty}^{\Ef^{\text{FM}}}\rhoup$ \\
+		$N^{\downarrow}_{\Tid}$ & 0.6951 e/Ti          & FM PDOS, $\int_{-\infty}^{\Ef^{\text{FM}}}\rhodn$ \\
+		$m_{\Tid}$              & 0.9152 $\mu_{\text{B}}$/Ti & $N^{\uparrow}_{\Tid} - N^{\downarrow}_{\Tid}$ \\
+		$\Dex$                  & 1.1672 eV            & center-of-mass, window $[-8, +10]$~eV \\
+		$\Ieff$                 & 1.2753 eV            & $\Dex / m_{\Tid}$ \\
+		$\Ieff \cdot \NEf$      & \textbf{1.5201}      & Stoner product \\
+		\bottomrule
+	\end{tabular}
+	\caption{Summary of all quantities used and obtained in the Stoner
+		evaluation.}
+\end{table}
+
+\end{document}
